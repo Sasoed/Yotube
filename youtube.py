@@ -32,21 +32,26 @@ def download_send_video(call):
     url = call.data.split('_')[1]
     yt = YouTube(url)
     video = yt.streams.get_highest_resolution()
-    video_stream = BytesIO()
-    video_stream.name = 'video.mp4'
-    video.download(output_path=video_stream)
-    video_stream.seek(0)
-    bot.send_video(call.message.chat.id, video=video_stream)
+    # Указываем путь для временного сохранения видео
+    download_path = "./temp_video.mp4"
+    video.download(filename=download_path)
+    with open(download_path, 'rb') as video_file:
+        bot.send_video(call.message.chat.id, video=video_file)
+    # Удаляем файл после отправки
+    os.remove(download_path)
 
 def download_send_audio(call):
     url = call.data.split('_')[1]
     yt = YouTube(url)
     audio = yt.streams.get_audio_only()
-    audio_stream = BytesIO()
-    audio_stream.name = 'audio.mp3'
-    audio.download(output_path=audio_stream)
-    audio_stream.seek(0)
-    bot.send_audio(call.message.chat.id, audio=audio_stream)
+    # Указываем путь для временного сохранения аудио
+    download_path = "./temp_audio.mp3"
+    audio.download(filename=download_path)
+    with open(download_path, 'rb') as audio_file:
+        bot.send_audio(call.message.chat.id, audio=audio_file)
+    # Удаляем файл после отправки
+    os.remove(download_path)
+
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
