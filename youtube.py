@@ -2,12 +2,14 @@ import os
 from telebot import TeleBot, types
 from pytube import YouTube
 from io import BytesIO
+import time
+import requests
 
 TOKEN = 'YOUR_BOT_TOKEN'
 bot = TeleBot(TOKEN)
 
 def sanitize_filename(filename):
-    return "".join([c for c in filename if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+    return "".join([c for c in filename if c.isalpha() or c.isdigit() or c == ' ']).rstrip()
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
@@ -20,7 +22,6 @@ def echo_all(message):
         yt = YouTube(url)
         title = sanitize_filename(yt.title)
 
-        # Создаем директорию с названием видео, если она не существует
         if not os.path.exists(title):
             os.makedirs(title)
 
@@ -29,7 +30,6 @@ def echo_all(message):
         video_btn = types.InlineKeyboardButton('Видео', callback_data='video_' + url)
         audio_btn = types.InlineKeyboardButton('Аудио', callback_data='audio_' + url)
         markup.add(video_btn, audio_btn)
-
         bot.send_photo(message.chat.id, photo=thumbnail_url, caption=f"Видео \"{title}\" было найдено.", reply_markup=markup)
     except Exception as e:
         bot.reply_to(message, "Произошла ошибка при обработке вашей ссылки. Убедитесь, что это правильная ссылка на видео YouTube.")
@@ -39,8 +39,8 @@ def download_send_video(call):
     yt = YouTube(url)
     title = sanitize_filename(yt.title)
     video = yt.streams.get_highest_resolution()
-
     video_path = os.path.join(title, 'video.mp4')
+
     if not os.path.exists(video_path):
         video.download(output_path=title, filename='video.mp4')
 
@@ -51,8 +51,8 @@ def download_send_audio(call):
     yt = YouTube(url)
     title = sanitize_filename(yt.title)
     audio = yt.streams.get_audio_only()
-
     audio_path = os.path.join(title, 'audio.mp3')
+
     if not os.path.exists(audio_path):
         audio.download(output_path=title, filename='audio.mp3')
 
@@ -65,4 +65,21 @@ def callback_query(call):
     elif call.data.startswith('audio_'):
         download_send_audio(call)
 
-bot.polling()
+# Функция для повторных попыток
+def start_polling_with_retries(retries=5, delay=5):
+    attempt = 0
+    while attempt < retries:
+        try:
+            print(f"Polling attempt {attempt + 1}")
+            bot.polling(none_stop=True)
+            break
+        except requests.exceptions.ConnectionError as e:
+            attempt += 1
+            print(f"ConnectionError: {e}. Attempt {attempt} of {retries}. Retrying in {delay} seconds...")
+            time.sleep(delay)
+        except Exception as e:
+            print(f"Unhandled exception: {e}")
+            break
+
+if __name__ == '__main__':
+    start_polling_with_retries()
