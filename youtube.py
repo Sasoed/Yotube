@@ -1,7 +1,6 @@
 import os
+import youtube_dl
 from telebot import TeleBot, types
-from pytube import YouTube
-from io import BytesIO
 import time
 import requests
 
@@ -19,13 +18,11 @@ def send_welcome(message):
 def echo_all(message):
     url = message.text
     try:
-        yt = YouTube(url)
-        title = sanitize_filename(yt.title)
+        with youtube_dl.YoutubeDL({'format': 'best'}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = sanitize_filename(info.get('title', 'video'))
+            thumbnail_url = info.get('thumbnail')
 
-        if not os.path.exists(title):
-            os.makedirs(title)
-
-        thumbnail_url = yt.thumbnail_url
         markup = types.InlineKeyboardMarkup()
         video_btn = types.InlineKeyboardButton('Видео', callback_data='video_' + url)
         audio_btn = types.InlineKeyboardButton('Аудио', callback_data='audio_' + url)
@@ -36,26 +33,22 @@ def echo_all(message):
 
 def download_send_video(call):
     url = call.data.split('_')[1]
-    yt = YouTube(url)
-    title = sanitize_filename(yt.title)
-    video = yt.streams.get_highest_resolution()
-    video_path = os.path.join(title, 'video.mp4')
-
-    if not os.path.exists(video_path):
-        video.download(output_path=title, filename='video.mp4')
-
+    ydl_opts = {'format': 'best', 'outtmpl': '%(title)s.%(ext)s'}
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url)
+        video_title = sanitize_filename(info.get('title', 'video'))
+        video_path = f"{video_title}.mp4"
+    
     bot.send_video(call.message.chat.id, open(video_path, 'rb'))
 
 def download_send_audio(call):
     url = call.data.split('_')[1]
-    yt = YouTube(url)
-    title = sanitize_filename(yt.title)
-    audio = yt.streams.get_audio_only()
-    audio_path = os.path.join(title, 'audio.mp3')
-
-    if not os.path.exists(audio_path):
-        audio.download(output_path=title, filename='audio.mp3')
-
+    ydl_opts = {'format': 'bestaudio/best', 'outtmpl': '%(title)s.%(ext)s', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}]}
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url)
+        audio_title = sanitize_filename(info.get('title', 'audio'))
+        audio_path = f"{audio_title}.mp3"
+    
     bot.send_audio(call.message.chat.id, open(audio_path, 'rb'))
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -65,7 +58,6 @@ def callback_query(call):
     elif call.data.startswith('audio_'):
         download_send_audio(call)
 
-# Функция для повторных попыток
 def start_polling_with_retries(retries=5, delay=5):
     attempt = 0
     while attempt < retries:
